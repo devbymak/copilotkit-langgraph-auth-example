@@ -2,11 +2,14 @@
 
 import { useCoAgent, useCopilotAction } from "@copilotkit/react-core";
 import { CopilotKitCSSProperties, CopilotSidebar } from "@copilotkit/react-ui";
-import { useState } from "react";
+import { useState, useContext, useMemo } from "react";
 import { Sun, X } from 'lucide-react';
+import { AuthContext } from "./components/fake-auth-provider";
 
 export default function CopilotKitPage() {
   const [themeColor, setThemeColor] = useState("#6366f1");
+  const authContext = useContext(AuthContext);
+  const isAuthenticated = authContext?.user !== null;
 
   // 🪁 Frontend Actions: https://docs.copilotkit.ai/guides/frontend-actions
   useCopilotAction({
@@ -21,12 +24,27 @@ export default function CopilotKitPage() {
     },
   });
 
+  const suggestions = useMemo(() => {
+    const baseSuggestions = [
+      { title: "who I am?", message: "who I am?" },
+      { title: "Set the theme to orange", message: "Set the theme to orange" },
+      { title: "Write a proverb about AI", message: "Write a proverb about AI" },
+    ];
+
+    if (isAuthenticated) {
+      baseSuggestions.push({ title: "Get the weather in SF", message: "Get the weather in SF" });
+    }
+
+    return baseSuggestions;
+  }, [isAuthenticated]);
+
   return (
     <main style={{ "--copilot-kit-primary-color": themeColor } as CopilotKitCSSProperties}>
       <YourMainContent themeColor={themeColor} />
       <CopilotSidebar
         clickOutsideToClose={false}
         defaultOpen={true}
+        suggestions={suggestions}
         labels={{
           title: "Popup Assistant",
           initial: "👋 Hi, there! You're chatting with an agent. This agent comes with a few tools to get you started.\n\nFor example you can try:\n- **Frontend Tools**: \"Set the theme to orange\"\n- **Shared State**: \"Write a proverb about AI\"\n- **Generative UI**: \"Get the weather in SF\" (for authenticated users)\n\nAs you interact with the agent, you'll see the UI update in real-time to reflect the agent's **state**, **tool calls**, and **progress**."
