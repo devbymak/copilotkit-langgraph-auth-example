@@ -200,13 +200,17 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
     if is_authenticated:
         user_id = user_data.get("user_id")
         user_name = user_data.get("name") or "Unknown"
+        user_email = user_data.get("email") or "not provided"
         user_role = user_data.get("role") or "user"
-        user_info = f" The current user is {user_name} (ID: {user_id}, Role: {user_role})."
+        user_info = f"The current user is {user_name} (ID: {user_id}, Email: {user_email}, Role: {user_role})."
     else:
-        user_info = " The user is not authenticated. The `get_weather` tool is only available to authenticated users. If asked for the weather, tell the user they need to sign in to use this feature."
+        user_info = "The user is not authenticated. The `get_weather` tool is only available to authenticated users. If asked for the weather, tell the user they need to sign in to use this feature."
     
     system_message = SystemMessage(
-        content=f"You are a helpful assistant.{user_info} The current proverbs are {state.get('proverbs', [])}."
+        content=f"""You are a helpful assistant.
+{user_info}
+When asked about the current user's identity (e.g., 'who am I?'), provide the user's details from the information above.
+The current proverbs are {state.get('proverbs', [])}."""
     )
 
     # 4. Run the model to generate a response
