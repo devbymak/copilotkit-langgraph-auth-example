@@ -1,16 +1,40 @@
 "use client";
 
-import { useCoAgent, useCopilotAction } from "@copilotkit/react-core";
+import { useCoAgent, useCopilotAction, useCopilotContext } from "@copilotkit/react-core";
 import { CopilotKitCSSProperties, CopilotSidebar } from "@copilotkit/react-ui";
-import { useState, useContext, useMemo } from "react";
+import { useState, useContext, useMemo, useCallback, useEffect } from "react";
 import { Sun, X } from 'lucide-react';
 import { AuthContext } from "./components/fake-auth-provider";
-import { CopilotInput } from "./components/copilot-input";
+import { CopilotInput, type FileUpload } from "./components/copilot-input";
 
 export default function CopilotKitPage() {
   const [themeColor, setThemeColor] = useState("#6366f1");
+  const [uploadedFiles, setUploadedFiles] = useState<FileUpload[]>([]);
   const authContext = useContext(AuthContext);
   const isAuthenticated = authContext?.user !== null;
+  const { threadId } = useCopilotContext();
+
+  const fetchUploadedFiles = useCallback(async () => {
+    if (!threadId) return;
+    try {
+      const response = await fetch(`http://localhost:8000/files/${threadId}`);
+      if (response.ok) {
+        const files = await response.json();
+        setUploadedFiles(files);
+      }
+    } catch (error) {
+      console.error('Error fetching uploaded files:', error);
+    }
+  }, [threadId]);
+
+  useEffect(() => {
+    const fetchFiles = async () => {
+      if (threadId) {
+        await fetchUploadedFiles();
+      }
+    };
+    fetchFiles();
+  }, [fetchUploadedFiles, threadId]);
 
   // 🪁 Frontend Actions: https://docs.copilotkit.ai/guides/frontend-actions
   useCopilotAction({
@@ -22,6 +46,35 @@ export default function CopilotKitPage() {
     }],
     handler({ themeColor }) {
       setThemeColor(themeColor);
+    },
+  });
+
+  useCopilotAction({
+    name: "getUploadedFileInfo",
+    description: "Get information about all currently uploaded files (PDF and Excel), including the file_ids needed to retrieve their content.",
+    parameters: [],
+    handler() {
+      if (uploadedFiles.length > 0) {
+        return {
+          count: uploadedFiles.length,
+          files: uploadedFiles.map(file => ({
+            fileId: file.fileId,
+            filename: file.name,
+            fileType: file.fileType,
+            pageCount: file.pageCount,
+            sheetCount: file.sheetCount,
+            totalRows: file.totalRows
+          })),
+          message: `${uploadedFiles.length} file(s) uploaded: ${uploadedFiles.map(file => {
+            const type = file.fileType === 'pdf' ? 'PDF' : 'Excel';
+            return `"${file.name}" (type: ${type}, file_id: ${file.fileId})`;
+          }).join(', ')}. Use get_file_content tool with a file_id to retrieve content.`
+        };
+      }
+      return {
+        count: 0,
+        message: "No files are currently uploaded."
+      };
     },
   });
 
@@ -39,6 +92,10 @@ export default function CopilotKitPage() {
     return baseSuggestions;
   }, [isAuthenticated]);
 
+  const CopilotInputWrapper = useCallback((props: Parameters<typeof CopilotInput>[0]) => (
+    <CopilotInput {...props} uploadedFiles={uploadedFiles} fetchUploadedFiles={fetchUploadedFiles} threadId={threadId} />
+  ), [uploadedFiles, fetchUploadedFiles, threadId])
+
   return (
     <main style={{ "--copilot-kit-primary-color": themeColor } as CopilotKitCSSProperties}>
       <YourMainContent themeColor={themeColor} />
@@ -48,9 +105,9 @@ export default function CopilotKitPage() {
         suggestions={suggestions}
         labels={{
           title: "Popup Assistant",
-          initial: "👋 Hi, there! You're chatting with an agent. This agent comes with a few tools to get you started.\n\nFor example you can try:\n- **Frontend Tools**: \"Set the theme to orange\"\n- **Shared State**: \"Write a proverb about AI\"\n- **Generative UI**: \"Get the weather in SF\" (for authenticated users)\n\nAs you interact with the agent, you'll see the UI update in real-time to reflect the agent's **state**, **tool calls**, and **progress**."
+          initial: "👋 Hi, there! You're chatting with an agent. This agent comes with a few tools to get you started.\n\nFor example you can try:\n- **Frontend Tools**: \"Set the theme to orange\"\n- **Shared State**: \"Write a proverb about AI\"\n- **Generative UI**: \"Get the weather in SF\" (for authenticated users)\n- **File Upload**: Click the attachment icon to upload and analyze files - PDF and Excel supported (multiple files, stays in context)\n\nAs you interact with the agent, you'll see the UI update in real-time to reflect the agent's **state**, **tool calls**, and **progress**."
         }}
-        Input={CopilotInput}
+        Input={CopilotInputWrapper}
       />
     </main>
   );

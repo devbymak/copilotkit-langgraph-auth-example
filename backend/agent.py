@@ -61,6 +61,53 @@ def get_weather(location: str):
     """
     return f"The weather for {location} is 70 degrees."
 
+@tool
+def get_file_content(file_id: str):
+    """
+    Retrieve and return the extracted content from a previously uploaded file (PDF or Excel).
+    Use this tool when a user references an uploaded file by its file_id.
+    The file_id is provided in the context when a file is uploaded.
+    Works with both PDF and Excel files.
+    """
+    try:
+        import requests
+        
+        # Get the file content from storage
+        response = requests.get(f"http://localhost:8000/file/{file_id}")
+        
+        if response.status_code == 404:
+            return f"File with ID {file_id} not found. Please ask the user to upload the file again."
+        
+        if response.status_code != 200:
+            return f"Error retrieving file: {response.text}"
+        
+        data = response.json()
+        filename = data.get("filename", "Unknown")
+        text = data.get("text", "")
+        file_type = data.get("file_type", "unknown")
+        
+        if file_type == "pdf":
+            page_count = data.get("page_count", 0)
+            return f"PDF Content Retrieved:\n- Filename: {filename}\n- Total Pages: {page_count}\n- Text Length: {len(text)} characters\n\nExtracted Text:\n{text}"
+        elif file_type == "excel":
+            sheet_count = data.get("sheet_count", 0)
+            total_rows = data.get("total_rows", 0)
+            return f"Excel Content Retrieved:\n- Filename: {filename}\n- Total Sheets: {sheet_count}\n- Total Rows: {total_rows}\n- Text Length: {len(text)} characters\n\nExtracted Content:\n{text}"
+        else:
+            return f"File Content Retrieved:\n- Filename: {filename}\n- Text Length: {len(text)} characters\n\nExtracted Content:\n{text}"
+        
+    except Exception as e:
+        return f"Error retrieving file: {str(e)}"
+
+# Keep old tool for backwards compatibility
+@tool
+def get_pdf_content(file_id: str):
+    """
+    Retrieve and return the extracted text content from a previously uploaded PDF file.
+    Deprecated: Use get_file_content instead.
+    """
+    return get_file_content(file_id)
+
 # @tool
 # def your_tool_here(your_arg: str):
 #     """Your tool description here."""
@@ -68,7 +115,9 @@ def get_weather(location: str):
 #     return "Your tool response here."
 
 backend_tools = [
-    get_weather
+    get_weather,
+    get_file_content,
+    get_pdf_content  # Keep for backwards compatibility
     # your_tool_here
 ]
 
@@ -210,7 +259,22 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         content=f"""You are a helpful assistant.
 {user_info}
 When asked about the current user's identity (e.g., 'who am I?'), provide the user's details from the information above.
-The current proverbs are {state.get('proverbs', [])}."""
+The current proverbs are {state.get('proverbs', [])}.
+
+IMPORTANT FILE HANDLING:
+- You have access to the `get_file_content` tool that retrieves content from uploaded files (PDF and Excel)
+- Multiple files can be uploaded simultaneously - check the context for all available file_ids
+- Supported file types: PDF documents and Excel spreadsheets (.xlsx, .xls)
+- If the user asks about files, documents, PDFs, Excel, spreadsheets, you MUST:
+  1. First call the `getUploadedFileInfo` action to get the list of file_ids, filenames, and types
+  2. If multiple files are uploaded and the user doesn't specify which one:
+     - Ask the user which file they want to analyze OR
+     - Process all files if the question applies to all
+  3. Call `get_file_content` with the appropriate file_id(s) to retrieve the content
+  4. Finally, answer the user's question based on the retrieved content
+- Never ask the user for the file_id - always use getUploadedFileInfo to get the available files
+- When multiple files are present, reference them by filename and type for clarity
+- For Excel files, the content includes sheet names, column names, row counts, and data preview"""
     )
 
     # 4. Run the model to generate a response
