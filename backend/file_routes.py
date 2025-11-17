@@ -143,6 +143,61 @@ async def process_excel(request: FileUploadRequest):
         raise HTTPException(status_code=500, detail=f"Error processing Excel: {str(e)}")
 
 
+async def process_csv(request: FileUploadRequest):
+    """Process a CSV file and store the extracted content."""
+    try:
+        import pandas as pd
+        
+        # Decode base64 content
+        csv_bytes = base64.b64decode(request.content)
+        csv_file = io.BytesIO(csv_bytes)
+        
+        # Read CSV file
+        df = pd.read_csv(csv_file)
+        total_rows = len(df)
+        
+        text_content = []
+        text_content.append(f"=== CSV File: {request.filename} ===")
+        text_content.append(f"Rows: {total_rows}, Columns: {len(df.columns)}")
+        text_content.append(f"Column Names: {', '.join(df.columns.tolist())}")
+        text_content.append("\nData Preview (first 10 rows):")
+        text_content.append(df.head(10).to_string(index=False))
+        
+        full_text = "\n\n".join(text_content)
+        
+        if not full_text.strip():
+            full_text = "The CSV file appears to be empty."
+        
+        # Generate a unique ID for this file
+        file_id = str(uuid.uuid4())
+        
+        # Get thread_id from request
+        thread_id = request.thread_id
+        if thread_id not in file_storage:
+            file_storage[thread_id] = {}
+
+        # Store the extracted text
+        file_storage[thread_id][file_id] = {
+            "filename": request.filename,
+            "text": full_text,
+            "total_rows": total_rows,
+            "file_type": "csv"
+        }
+        
+        return {
+            "success": True,
+            "file_id": file_id,
+            "filename": request.filename,
+            "extracted_text": full_text[:1000] + "..." if len(full_text) > 1000 else full_text,
+            "total_rows": total_rows,
+            "text_length": len(full_text),
+            "file_type": "csv"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing CSV: {str(e)}")
+
+
 @router.post("/process-file")
 async def process_file_endpoint(request: FileUploadRequest):
     """Process a file (PDF or Excel) and store the extracted content."""
@@ -151,6 +206,8 @@ async def process_file_endpoint(request: FileUploadRequest):
         return await process_pdf(request)
     elif file_extension in ['.xlsx', '.xls']:
         return await process_excel(request)
+    elif file_extension == '.csv':
+        return await process_csv(request)
     else:
         raise HTTPException(status_code=400, detail="Unsupported file type")
 

@@ -14,7 +14,7 @@ export type FileUpload = {
     sheetCount?: number;
     totalRows?: number;
     extractedText: string;
-    fileType: 'pdf' | 'excel';
+    fileType: 'pdf' | 'excel' | 'csv';
 };
 
 type CopilotInputWithCallbackProps = InputProps & {
@@ -47,16 +47,17 @@ export const CopilotInput = ({ onSend, inProgress, uploadedFiles = [], fetchUplo
         const supportedFiles = Array.from(files).filter(file => 
             file.type === 'application/pdf' || 
             file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-            file.type === 'application/vnd.ms-excel'
+            file.type === 'application/vnd.ms-excel' ||
+            file.type === 'text/csv'
         );
         
         if (supportedFiles.length === 0) {
-            alert('Please upload PDF or Excel files only');
+            alert('Please upload PDF, Excel, or CSV files only');
             return;
         }
 
         if (supportedFiles.length !== files.length) {
-            alert(`Only PDF and Excel files will be uploaded. ${files.length - supportedFiles.length} unsupported file(s) skipped.`);
+            alert(`Only PDF, Excel, and CSV files will be uploaded. ${files.length - supportedFiles.length} unsupported file(s) skipped.`);
         }
 
         setIsUploading(true);
@@ -225,7 +226,9 @@ export const CopilotInput = ({ onSend, inProgress, uploadedFiles = [], fetchUplo
                                     <div className="text-xs text-gray-500">
                                         {file.fileType === 'pdf' 
                                             ? `${file.pageCount} pages · PDF` 
-                                            : `${file.sheetCount} sheets, ${file.totalRows} rows · Excel`
+                                            : file.fileType === 'excel'
+                                            ? `${file.sheetCount} sheets, ${file.totalRows} rows · Excel`
+                                            : `${file.totalRows} rows · CSV`
                                         } · In context
                                     </div>
                                 </div>
@@ -261,7 +264,7 @@ export const CopilotInput = ({ onSend, inProgress, uploadedFiles = [], fetchUplo
                     value={text}
                     onChange={(e) => setText(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder={uploadedFiles.length > 0 ? `Ask questions about ${uploadedFiles.length} uploaded file${uploadedFiles.length > 1 ? 's' : ''}...` : "Create survey questions or upload files (PDF/Excel)..."}
+                    placeholder={uploadedFiles.length > 0 ? `Ask questions about ${uploadedFiles.length} uploaded file${uploadedFiles.length > 1 ? 's' : ''}...` : "Create survey questions or upload files (PDF/Excel/CSV)..."}
                     className="overflow-auto resize-none"
                     rows={1}
                     disabled={inProgress}
@@ -270,7 +273,7 @@ export const CopilotInput = ({ onSend, inProgress, uploadedFiles = [], fetchUplo
                     <input
                         ref={fileInputRef}
                         type="file"
-                        accept="application/pdf,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                        accept="application/pdf,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,.csv"
                         onChange={handleFileUpload}
                         className="hidden"
                         disabled={inProgress}
@@ -281,7 +284,7 @@ export const CopilotInput = ({ onSend, inProgress, uploadedFiles = [], fetchUplo
                         disabled={inProgress || isUploading}
                         className="copilotKitInputControlButton mr-2"
                         aria-label="Upload Files"
-                        title="Upload files: PDF, Excel (multiple files supported)"
+                        title="Upload files: PDF, Excel, CSV (multiple files supported)"
                     >
                         <svg
                             xmlns="http://www.w3.org/2000/svg"

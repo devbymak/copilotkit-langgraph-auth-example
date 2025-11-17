@@ -64,7 +64,7 @@ def get_weather(location: str):
 @tool
 def get_file_content(file_id: str, thread_id: str):
     """
-    Retrieve and return the extracted content from a previously uploaded file (PDF or Excel).
+    Retrieve and return the extracted content from a previously uploaded file (PDF, Excel, or CSV).
     Use this tool when a user references an uploaded file.
     Both file_id and thread_id are required.
     """
@@ -94,6 +94,9 @@ def get_file_content(file_id: str, thread_id: str):
             sheet_count = data.get("sheet_count", 0)
             total_rows = data.get("total_rows", 0)
             return f"Excel Content Retrieved:\n- Filename: {filename}\n- Total Sheets: {sheet_count}\n- Total Rows: {total_rows}\n- Text Length: {len(text)} characters\n\nExtracted Content:\n{text}"
+        elif file_type == "csv":
+            total_rows = data.get("total_rows", 0)
+            return f"CSV Content Retrieved:\n- Filename: {filename}\n- Total Rows: {total_rows}\n- Text Length: {len(text)} characters\n\nExtracted Content:\n{text}"
         else:
             return f"File Content Retrieved:\n- Filename: {filename}\n- Text Length: {len(text)} characters\n\nExtracted Content:\n{text}"
         
@@ -103,7 +106,7 @@ def get_file_content(file_id: str, thread_id: str):
 @tool
 def list_uploaded_files(thread_id: str):
     """
-    Get information about all currently uploaded files (PDF and Excel) for a given thread_id.
+    Get information about all currently uploaded files (PDF, Excel, and CSV) for a given thread_id.
     This includes the file_ids needed to retrieve their content.
     """
     if not thread_id:
@@ -286,10 +289,10 @@ The current proverbs are {state.get('proverbs', [])}.
 
 IMPORTANT FILE HANDLING:
 - You have access to tools for file handling: `list_uploaded_files` and `get_file_content`.
-- `list_uploaded_files` gets a list of all uploaded files (PDF and Excel). It requires the `thread_id`.
+- `list_uploaded_files` gets a list of all uploaded files (PDF, Excel, and CSV). It requires the `thread_id`.
 - `get_file_content` retrieves content from a specific file. It requires both a `file_id` and the `thread_id`.
 - The `thread_id` is available in the user information context.
-- Supported file types: PDF documents and Excel spreadsheets (.xlsx, .xls).
+- Supported file types: PDF documents, Excel spreadsheets (.xlsx, .xls), and CSV files (.csv).
 - If the user asks about files, documents, PDFs, Excel, spreadsheets, you MUST:
   1. First, call the `list_uploaded_files` tool with the current `thread_id` to get the list of file metadata (file_id, name, type).
   2. Then, call `get_file_content` with the appropriate `file_id` and `thread_id` to retrieve the content.
