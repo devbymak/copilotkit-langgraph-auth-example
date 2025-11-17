@@ -6,7 +6,7 @@ Secure your LangGraph agents with user authentication. Shows how to:
 - 🛡️ Secure agent endpoints and tools based on user identity
 - 👤 Access user information within LangGraph agents
 - 🎯 Conditionally enable/disable agent capabilities
-- 📁 Upload and process files (PDF, Excel) with the agent
+- 📁 Upload and process files (PDF, Excel, CSV) with the agent
 
 ## Prerequisites
 
@@ -69,6 +69,7 @@ The agent supports file uploads with automatic processing:
 
 - **PDF Files** - Text extraction with page-by-page content
 - **Excel Files** (.xlsx, .xls) - Sheet parsing, column analysis, and data preview
+- **CSV Files** (.csv) - Data parsing, column analysis, and data preview
 
 Files are processed and stored per conversation thread, allowing the agent to:
 - Answer questions about file content
@@ -76,7 +77,7 @@ Files are processed and stored per conversation thread, allowing the agent to:
 - Extract and reference information from documents
 
 File processing endpoints:
-- `/process-file` - Upload and process PDF or Excel files
+- `/process-file` - Upload and process PDF, Excel, or CSV files
 - `/files/{thread_id}` - List all uploaded files for a thread
 - `/file/{thread_id}/{file_id}` - Retrieve file content
 - `/file/{thread_id}/{file_id}` (DELETE) - Remove uploaded files
