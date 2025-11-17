@@ -49,35 +49,6 @@ export default function CopilotKitPage() {
     },
   });
 
-  useCopilotAction({
-    name: "getUploadedFileInfo",
-    description: "Get information about all currently uploaded files (PDF and Excel), including the file_ids needed to retrieve their content.",
-    parameters: [],
-    handler() {
-      if (uploadedFiles.length > 0) {
-        return {
-          count: uploadedFiles.length,
-          files: uploadedFiles.map(file => ({
-            fileId: file.fileId,
-            filename: file.name,
-            fileType: file.fileType,
-            pageCount: file.pageCount,
-            sheetCount: file.sheetCount,
-            totalRows: file.totalRows
-          })),
-          message: `${uploadedFiles.length} file(s) uploaded: ${uploadedFiles.map(file => {
-            const type = file.fileType === 'pdf' ? 'PDF' : 'Excel';
-            return `"${file.name}" (type: ${type}, file_id: ${file.fileId})`;
-          }).join(', ')}. Use get_file_content tool with a file_id to retrieve content.`
-        };
-      }
-      return {
-        count: 0,
-        message: "No files are currently uploaded."
-      };
-    },
-  });
-
   const suggestions = useMemo(() => {
     const baseSuggestions = [
       { title: "who I am?", message: "who I am?" },

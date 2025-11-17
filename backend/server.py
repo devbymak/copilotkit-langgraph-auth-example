@@ -1,7 +1,7 @@
 import os
-import uuid
 import base64
 import io
+import uuid
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -36,35 +36,55 @@ class FileUploadRequest(BaseModel):
     content: str  # base64 encoded
     thread_id: str
 
+
 # add new route for health check (must be defined before langgraph endpoint)
 @app.get("/health")
 def health():
     """Health check."""
     return {"status": "ok"}
 
-@app.post("/process-pdf")
-async def process_pdf_endpoint(request: FileUploadRequest):
+@app.post("/process-file")
+async def process_file_endpoint(request: FileUploadRequest):
+    """Process a file (PDF or Excel) and store the extracted content."""
+    file_extension = os.path.splitext(request.filename)[1].lower()
+    if file_extension == '.pdf':
+        return await process_pdf(request)
+    elif file_extension in ['.xlsx', '.xls']:
+        return await process_excel(request)
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+
+async def process_pdf(request: FileUploadRequest):
     """Process a PDF file and store the extracted text."""
     try:
         from pypdf import PdfReader
-        
+        from pypdf.errors import PdfReadError
+
         # Decode base64 content
         pdf_bytes = base64.b64decode(request.content)
         pdf_file = io.BytesIO(pdf_bytes)
         
-        # Extract text from PDF
-        reader = PdfReader(pdf_file)
-        text_content = []
-        
-        for page_num, page in enumerate(reader.pages, 1):
-            page_text = page.extract_text()
-            if page_text.strip():
-                text_content.append(f"--- Page {page_num} ---\n{page_text}")
-        
-        full_text = "\n\n".join(text_content)
-        
-        if not full_text.strip():
-            full_text = "The PDF appears to be empty or contains no extractable text."
+        try:
+            reader = PdfReader(pdf_file)
+            
+            if reader.is_encrypted:
+                raise HTTPException(status_code=400, detail=f"File '{request.filename}' is encrypted and cannot be processed.")
+
+            text_content = []
+            
+            for page_num, page in enumerate(reader.pages, 1):
+                page_text = page.extract_text()
+                if page_text:
+                    text_content.append(f"--- Page {page_num} ---\n{page_text}")
+            
+            full_text = "\n\n".join(text_content)
+            
+            if not full_text.strip():
+                # This could be an image-only PDF
+                full_text = "The PDF contains no extractable text. It might be an image-based file."
+
+        except PdfReadError:
+            raise HTTPException(status_code=400, detail=f"File '{request.filename}' is corrupted or not a valid PDF.")
         
         # Generate a unique ID for this PDF
         file_id = str(uuid.uuid4())
@@ -92,11 +112,13 @@ async def process_pdf_endpoint(request: FileUploadRequest):
             "file_type": "pdf"
         }
         
+    except HTTPException as http_exc:
+        # Re-raise HTTPException to be handled by FastAPI
+        raise http_exc
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred while processing '{request.filename}': {str(e)}")
 
-@app.post("/process-excel")
-async def process_excel_endpoint(request: FileUploadRequest):
+async def process_excel(request: FileUploadRequest):
     """Process an Excel file and store the extracted content."""
     try:
         import pandas as pd
@@ -192,16 +214,6 @@ async def get_file_content(thread_id: str, file_id: str):
         raise HTTPException(status_code=404, detail="File not found")
     
     return file_storage[thread_id][file_id]
-
-# Keep old endpoint for backwards compatibility
-@app.get("/pdf/{file_id}")
-async def get_pdf_content(file_id: str):
-    # This is a bit of a hack for backwards compatibility.
-    # We'll search for the file_id across all threads.
-    for thread_id in file_storage:
-        if file_id in file_storage[thread_id]:
-            return file_storage[thread_id][file_id]
-    raise HTTPException(status_code=404, detail="File not found")
 
 add_langgraph_fastapi_endpoint(
   app=app,

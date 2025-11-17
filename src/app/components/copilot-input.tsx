@@ -60,14 +60,10 @@ export const CopilotInput = ({ onSend, inProgress, uploadedFiles = [], fetchUplo
         }
 
         setIsUploading(true);
-        const newFiles: FileUpload[] = [];
-
-        try {
-            // Upload all files sequentially
-            for (const file of supportedFiles) {
+        const uploadPromises = supportedFiles.map(async (file) => {
+            try {
                 const base64Content = await fileToBase64(file);
-                const isPDF = file.type === 'application/pdf';
-                const endpoint = isPDF ? '/process-pdf' : '/process-excel';
+                const endpoint = '/process-file';
 
                 const response = await fetch(`http://localhost:8000${endpoint}`, {
                     method: 'POST',
@@ -82,32 +78,47 @@ export const CopilotInput = ({ onSend, inProgress, uploadedFiles = [], fetchUplo
                 });
 
                 if (!response.ok) {
-                    throw new Error(`Failed to upload ${file.name}`);
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || `Failed to upload ${file.name}`);
                 }
 
                 const data = await response.json();
-                newFiles.push({
-                    fileId: data.file_id,
-                    name: data.filename,
-                    pageCount: data.page_count,
-                    sheetCount: data.sheet_count,
-                    totalRows: data.total_rows,
-                    extractedText: data.extracted_text,
-                    fileType: data.file_type,
-                });
+                return { status: 'success', file, data };
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error)
+                return { status: 'error', file, error: message };
             }
-            
-            if (fetchUploadedFiles) {
-                await fetchUploadedFiles();
+        });
+
+        const results = await Promise.allSettled(uploadPromises);
+
+        let successCount = 0;
+        const errorMessages: string[] = [];
+
+        results.forEach(result => {
+            if (result.status === 'fulfilled' && result.value) {
+                if (result.value.status === 'success') {
+                    successCount++;
+                } else {
+                    errorMessages.push(`- ${result.value.file.name}: ${result.value.error}`);
+                }
+            } else if (result.status === 'rejected') {
+                errorMessages.push(`- An unexpected error occurred during upload.`);
+                console.error('Unexpected upload error:', result.reason);
             }
-        } catch (error) {
-            console.error('Error uploading files:', error);
-            alert('Failed to upload one or more files. Please try again.');
-        } finally {
-            setIsUploading(false);
-            if (fileInputRef.current) {
-                fileInputRef.current.value = '';
-            }
+        });
+
+        if (fetchUploadedFiles && successCount > 0) {
+            await fetchUploadedFiles();
+        }
+
+        if (errorMessages.length > 0) {
+            alert(`Upload summary:\n${successCount} file(s) uploaded successfully.\n${errorMessages.length} file(s) failed to upload:\n${errorMessages.join('\n')}`);
+        }
+
+        setIsUploading(false);
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
         }
     };
 

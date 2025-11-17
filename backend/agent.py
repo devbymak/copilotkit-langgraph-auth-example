@@ -62,21 +62,22 @@ def get_weather(location: str):
     return f"The weather for {location} is 70 degrees."
 
 @tool
-def get_file_content(file_id: str):
+def get_file_content(file_id: str, thread_id: str):
     """
     Retrieve and return the extracted content from a previously uploaded file (PDF or Excel).
-    Use this tool when a user references an uploaded file by its file_id.
-    The file_id is provided in the context when a file is uploaded.
-    Works with both PDF and Excel files.
+    Use this tool when a user references an uploaded file.
+    Both file_id and thread_id are required.
     """
+    if not thread_id:
+        return "Error: thread_id is missing. Cannot retrieve file."
     try:
         import requests
         
         # Get the file content from storage
-        response = requests.get(f"http://localhost:8000/file/{file_id}")
+        response = requests.get(f"http://localhost:8000/file/{thread_id}/{file_id}")
         
         if response.status_code == 404:
-            return f"File with ID {file_id} not found. Please ask the user to upload the file again."
+            return f"File with ID {file_id} not found in thread {thread_id}. The file might have been deleted or the session expired. Please ask the user to upload the file again."
         
         if response.status_code != 200:
             return f"Error retrieving file: {response.text}"
@@ -97,16 +98,37 @@ def get_file_content(file_id: str):
             return f"File Content Retrieved:\n- Filename: {filename}\n- Text Length: {len(text)} characters\n\nExtracted Content:\n{text}"
         
     except Exception as e:
-        return f"Error retrieving file: {str(e)}"
+        return f"An unexpected error occurred while retrieving file {file_id}: {str(e)}"
 
-# Keep old tool for backwards compatibility
 @tool
-def get_pdf_content(file_id: str):
+def list_uploaded_files(thread_id: str):
     """
-    Retrieve and return the extracted text content from a previously uploaded PDF file.
-    Deprecated: Use get_file_content instead.
+    Get information about all currently uploaded files (PDF and Excel) for a given thread_id.
+    This includes the file_ids needed to retrieve their content.
     """
-    return get_file_content(file_id)
+    if not thread_id:
+        return "Error: thread_id is missing. Cannot list files."
+    try:
+        import requests
+        
+        response = requests.get(f"http://localhost:8000/files/{thread_id}")
+        
+        if response.status_code != 200:
+            return f"Error listing files: {response.text}"
+        
+        files = response.json()
+        
+        if not files:
+            return "No files are currently uploaded."
+            
+        return {
+            "count": len(files),
+            "files": files,
+            "message": f"{len(files)} file(s) found. Use the 'get_file_content' tool with a file_id to retrieve content."
+        }
+        
+    except Exception as e:
+        return f"An unexpected error occurred while listing files: {str(e)}"
 
 # @tool
 # def your_tool_here(your_arg: str):
@@ -117,7 +139,7 @@ def get_pdf_content(file_id: str):
 backend_tools = [
     get_weather,
     get_file_content,
-    get_pdf_content  # Keep for backwards compatibility
+    list_uploaded_files
     # your_tool_here
 ]
 
@@ -251,9 +273,10 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         user_name = user_data.get("name") or "Unknown"
         user_email = user_data.get("email") or "not provided"
         user_role = user_data.get("role") or "user"
-        user_info = f"The current user is {user_name} (ID: {user_id}, Email: {user_email}, Role: {user_role})."
+        thread_id = config.get("configurable", {}).get("thread_id")
+        user_info = f"The current user is {user_name} (ID: {user_id}, Email: {user_email}, Role: {user_role}). The current conversation thread_id is {thread_id}."
     else:
-        user_info = "The user is not authenticated. The `get_weather` tool is only available to authenticated users. If asked for the weather, tell the user they need to sign in to use this feature."
+        user_info = "The user is not authenticated. Certain tools like file handling are unavailable. If asked about files or to perform actions requiring login, inform the user they need to sign in."
     
     system_message = SystemMessage(
         content=f"""You are a helpful assistant.
@@ -262,19 +285,19 @@ When asked about the current user's identity (e.g., 'who am I?'), provide the us
 The current proverbs are {state.get('proverbs', [])}.
 
 IMPORTANT FILE HANDLING:
-- You have access to the `get_file_content` tool that retrieves content from uploaded files (PDF and Excel)
-- Multiple files can be uploaded simultaneously - check the context for all available file_ids
-- Supported file types: PDF documents and Excel spreadsheets (.xlsx, .xls)
+- You have access to tools for file handling: `list_uploaded_files` and `get_file_content`.
+- `list_uploaded_files` gets a list of all uploaded files (PDF and Excel). It requires the `thread_id`.
+- `get_file_content` retrieves content from a specific file. It requires both a `file_id` and the `thread_id`.
+- The `thread_id` is available in the user information context.
+- Supported file types: PDF documents and Excel spreadsheets (.xlsx, .xls).
 - If the user asks about files, documents, PDFs, Excel, spreadsheets, you MUST:
-  1. First call the `getUploadedFileInfo` action to get the list of file_ids, filenames, and types
-  2. If multiple files are uploaded and the user doesn't specify which one:
-     - Ask the user which file they want to analyze OR
-     - Process all files if the question applies to all
-  3. Call `get_file_content` with the appropriate file_id(s) to retrieve the content
-  4. Finally, answer the user's question based on the retrieved content
-- Never ask the user for the file_id - always use getUploadedFileInfo to get the available files
-- When multiple files are present, reference them by filename and type for clarity
-- For Excel files, the content includes sheet names, column names, row counts, and data preview"""
+  1. First, call the `list_uploaded_files` tool with the current `thread_id` to get the list of file metadata (file_id, name, type).
+  2. Then, call `get_file_content` with the appropriate `file_id` and `thread_id` to retrieve the content.
+  3. If multiple files are uploaded and the user is vague, ask for clarification on which file to analyze.
+  4. Finally, answer the user's question based on the retrieved content.
+- Never ask the user for the file_id or thread_id - you have access to this information.
+- When multiple files are present, reference them by filename and type for clarity.
+- For Excel files, the content includes sheet names, column names, row counts, and data preview."""
     )
 
     # 4. Run the model to generate a response
